@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador Clínico Unificado: Orden TAC V22 + SIC V6</title>
+    <!-- Tailwind CSS para diseño moderno, limpio y responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería pdf-lib para inyección en AcroForm (TAC) y Canvas Escalado (SIC) -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+        }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+<body class="min-h-screen py-6 px-4 sm:px-6">
+
+    <!-- VARIABLES MÁGICAS PARA COMPILACIÓN PORTÁTIL DUAL (BASE64) -->
+    <script id="embedded-pdfs-script">
+        let embeddedTacBase64 = "<!-- TAC_PDF_BASE64_PLACEHOLDER -->";
+        let embeddedSicBase64 = "<!-- SIC_PDF_BASE64_PLACEHOLDER -->";
+        let embeddedSicRotation = 0;
+    </script>
+
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+
+        <!-- CABECERA INSTITUCIONAL -->
+        <header class="bg-gradient-to-r from-blue-800 via-blue-700 to-emerald-800 text-white px-6 py-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <span class="bg-white/15 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border border-white/20">
+                        Fusión V22 + SIC V6
+                    </span>
+                    <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Generador Automático TAC + Interconsulta</h1>
+                </div>
+                <p class="text-xs sm:text-sm text-blue-100 mt-1">
+                    Hospital Provincial Marga Marga / Hospital de Peñablanca • SSVQP
+                </p>
+            </div>
+
+            <!-- Botón para reabrir panel de compilación o cargar PDFs en sesión -->
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="toggleSetupModal()" class="bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3 py-2 rounded-lg border border-white/25 transition flex items-center gap-1.5">
+                    <span>⚙️</span> Configurar / Compilar App Portátil
+                </button>
+            </div>
+        </header>
+
+        <!-- PANEL DE INSTALACIÓN / COMPILADOR DE APP PORTÁTIL DUAL -->
+        <div id="setup-section" class="bg-amber-50 border-b-2 border-dashed border-amber-300 p-6">
+            <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-base font-bold text-amber-900 flex items-center gap-2">
+                        <span>⚙️</span> Compilador Único: App Portátil Unificada (TAC + SIC)
+                    </h2>
+                    <p class="text-xs text-amber-800 mt-0.5">
+                        Carga por única vez ambos PDFs originales vacíos. Puedes usar el generador de inmediato en esta sesión o pulsar <strong>«Descargar App Portátil Definitiva»</strong> para obtener un único archivo HTML con ambos documentos incrustados para siempre.
+                    </p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <!-- Selector PDF 1: Orden de TAC -->
+                <div class="bg-white p-4 rounded-lg border border-amber-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-blue-800 uppercase">1. PDF Base Orden de TAC (4 páginas)</span>
+                        <span id="badge-tac-status" class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">Pendiente</span>
+                    </div>
+                    <input type="file" id="file-tac-pdf" accept="application/pdf" onchange="handlePdfUpload('TAC', this)" class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+
+                <!-- Selector PDF 2: Interconsulta Escaneada (SIC) -->
+                <div class="bg-white p-4 rounded-lg border border-amber-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-emerald-800 uppercase">2. PDF Base Interconsulta (SIC Escaneada)</span>
+                        <span id="badge-sic-status" class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">Pendiente</span>
+                    </div>
+                    <input type="file" id="file-sic-pdf" accept="application/pdf" onchange="handlePdfUpload('SIC', this)" class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                    
+                    <div class="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span class="text-[11px] text-slate-600 font-medium">Orientación página escaneada SIC:</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="rotateSicOrientation(180)" class="text-[11px] bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded transition">
+                                🔄 Voltear 180°
+                            </button>
+                            <button type="button" onclick="rotateSicOrientation(90)" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-0.5 rounded transition">
+                                ↻ 90°
+                            </button>
+                            <span id="sic-rot-label" class="mono text-xs font-bold text-emerald-800 px-1">0°</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div id="setup-feedback" class="text-xs font-semibold text-amber-900">
+                    💡 Si ya subiste el PDF de la Interconsulta en el estudio anterior, se habrá recuperado automáticamente de la memoria.
+                </div>
+                <button type="button" onclick="compileDualPortableApp()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-lg shadow transition flex items-center gap-2">
+                    <span>📦</span> Crear y Descargar App Portátil Unificada (.HTML)
+                </button>
+            </div>
+        </div>
+
+        <!-- CUERPO DEL FORMULARIO CLÍNICO MAESTRO -->
+        <div class="p-6 space-y-7">
+
+            <!-- Barra de estado de PDFs listos -->
+            <div id="ready-banner" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between">
+                <span>✅ Sistema 100% Instalado y Optimizado (Orden TAC V22 + Interconsulta SIC V6 listos).</span>
+                <button type="button" onclick="fillDemoValues()" class="text-emerald-800 underline hover:text-emerald-950 font-bold">
+                    ⚡ Cargar ejemplo de prueba
+                </button>
+            </div>
+
+            <!-- =================================================================== -->
+            <!-- SECCIÓN 1: IDENTIFICACIÓN DEL PACIENTE Y ORIGEN CLÍNICO             -->
+            <!-- =================================================================== -->
+            <section>
+                <div class="flex items-center justify-between border-b-2 border-blue-700 pb-1.5 mb-4">
+                    <h2 class="text-sm sm:text-base font-bold text-blue-800 uppercase tracking-wide">
+                        1. Identificación del Paciente y Origen
+                    </h2>
+                    <span class="text-[11px] text-slate-500 font-medium">
+                        En TAC se concatenan Nombres + Apellidos; en SIC se separan por casilla
+                    </span>
+                </div>
+
+                <!-- Fila Nombres y Apellidos del Paciente -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nombres del Paciente</label>
+                        <input type="text" id="pac_nom" placeholder="Ej: Juan Carlos" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Apellido Paterno</label>
+                        <input type="text" id="pac_ap" placeholder="Ej: González" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Apellido Materno</label>
+                        <input type="text" id="pac_am" placeholder="Ej: Tapia" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Fila RUT, Ficha, Sexo, Fecha Nac, Edad -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">RUT Paciente</label>
+                        <input type="text" id="rut" placeholder="12345678-K" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Ficha / Hist. Clínica</label>
+                        <input type="text" id="ficha" placeholder="Ej: 45892-1" maxlength="9" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Sexo</label>
+                        <select id="sexo" onchange="calcularTFG()" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white">
+                            <option value="">Seleccionar...</option>
+                            <option value="F">Femenino</option>
+                            <option value="M">Masculino</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Fch. Nac (DD/MM/AAAA)</label>
+                        <input type="text" id="fecha_nac" placeholder="DD/MM/AAAA" maxlength="10" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div class="col-span-2 sm:col-span-1">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Edad (Auto)</label>
+                        <input type="number" id="edad" oninput="calcularTFG()" readonly class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-slate-100 text-slate-700 font-semibold focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Fila Origen del Paciente y Servicio -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Origen del Paciente</label>
+                        <select id="origen" onchange="actualizarOrigenYMenuSIC()" class="w-full px-3 py-2 text-sm font-semibold border-2 border-blue-400 bg-blue-50/40 rounded-lg focus:border-blue-700 focus:outline-none">
+                            <option value="">Seleccionar origen...</option>
+                            <option value="AMB">Ambulatorio (Solo Orden TAC)</option>
+                            <option value="URG">Urgencias (Solo Orden TAC)</option>
+                            <option value="HOSP">🏥 Hospitalizado (Orden TAC + Interconsulta SIC)</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Servicio / Unidad de Origen (Compartido TAC y SIC)</label>
+                        <input type="text" id="servicio" placeholder="Se autocompleta según origen (editable)" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-600 focus:outline-none">
+                    </div>
+                </div>
+            </section>
+
+            <!-- =================================================================== -->
+            <!-- SECCIÓN 2: MÉDICO SOLICITANTE (DESGLOSADO PARA TAC Y SIC)           -->
+            <!-- =================================================================== -->
+            <section>
+                <div class="flex items-center justify-between border-b-2 border-blue-700 pb-1.5 mb-4">
+                    <h2 class="text-sm sm:text-base font-bold text-blue-800 uppercase tracking-wide">
+                        2. Datos del Médico Solicitante
+                    </h2>
+                    <span class="text-[11px] text-slate-500">Se guarda automáticamente en este navegador para próximas órdenes</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nombres Médico</label>
+                        <input type="text" id="med_nom" oninput="persistDoctorData()" placeholder="Ej: Sebastián" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Apellido Paterno Médico</label>
+                        <input type="text" id="med_ap" oninput="persistDoctorData()" placeholder="Ej: Rojas" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Apellido Materno Médico</label>
+                        <input type="text" id="med_am" oninput="persistDoctorData()" placeholder="Ej: Valdés" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">RUT Médico (Para SIC)</label>
+                        <input type="text" id="med_rut" oninput="persistDoctorData()" placeholder="16543210-9" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+                </div>
+            </section>
+
+            <!-- =================================================================== -->
+            <!-- SECCIÓN 3: DATOS CLÍNICOS COMPARTIDOS (TAC <-> INTERCONSULTA)       -->
+            <!-- =================================================================== -->
+            <section>
+                <div class="flex items-center justify-between border-b-2 border-blue-700 pb-1.5 mb-4">
+                    <h2 class="text-sm sm:text-base font-bold text-blue-800 uppercase tracking-wide">
+                        3. Antecedentes Clínicos y Diagnóstico (Compartidos con SIC)
+                    </h2>
+                    <span class="text-[11px] text-emerald-700 font-semibold">
+                        Con control de recuadro y auto-corte para Interconsulta
+                    </span>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Diagnóstico / Hipótesis Diagnóstica -->
+                    <div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <label class="block text-xs font-bold text-slate-700">
+                                Diagnóstico / Hipótesis Diagnóstica <span class="text-slate-400 font-normal">(Orden TAC y Apdo. 20 SIC)</span>
+                            </label>
+                            <span id="badge-fit-diagnostico" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 mono">
+                                SIC Hipótesis: 0 / 11 líneas máx
+                            </span>
+                        </div>
+                        <textarea id="diagnostico" rows="2" oninput="verificarLimitesTextoSIC()" placeholder="Ingresa las hipótesis diagnósticas..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"></textarea>
+                        <p id="alert-fit-diagnostico" class="hidden text-xs font-bold text-red-600 mt-1">
+                            ⚠️ El texto supera las 11 líneas del recuadro de Hipótesis Diagnóstica en la Interconsulta y se cortará al llegar al borde inferior.
+                        </p>
+                    </div>
+
+                    <!-- Antecedentes Clínicos y Quirúrgicos / Fundamentos del Diagnóstico -->
+                    <div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <label class="block text-xs font-bold text-slate-700">
+                                Antecedentes Clínicos y Quirúrgicos <span class="text-emerald-700 font-semibold">(Traspasa a «23. Fundamentos del Diagnóstico» en SIC)</span>
+                            </label>
+                            <span id="badge-fit-antecedentes" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 mono">
+                                SIC Fundamentos: 0 / 5 líneas máx
+                            </span>
+                        </div>
+                        <textarea id="antecedentes" rows="3" oninput="verificarLimitesTextoSIC()" placeholder="Cuadro clínico, hallazgos al examen físico y antecedentes relevantes..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"></textarea>
+                        <p id="alert-fit-antecedentes" class="hidden text-xs font-bold text-red-600 mt-1">
+                            ⚠️ El texto supera las 5 líneas del recuadro de Fundamentos del Diagnóstico en la Interconsulta y se cortará en el límite inferior.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =================================================================== -->
+            <!-- MENÚ DESPLEGABLE EXCLUSIVO: PACIENTE HOSPITALIZADO (INTERCONSULTA)  -->
+            <!-- =================================================================== -->
+            <section id="hospitalizado-sic-panel" class="hidden bg-emerald-50/70 border-2 border-emerald-500 rounded-xl p-5 shadow-sm space-y-4 transition-all">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-300 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-emerald-700 text-white text-xs font-bold px-2.5 py-1 rounded-md">
+                            🏥 MODO HOSPITALIZADO ACTIVO
+                        </span>
+                        <h3 class="text-sm sm:text-base font-bold text-emerald-950">
+                            Datos Adicionales para Emisión Automática de Interconsulta (SIC)
+                        </h3>
+                    </div>
+                    <span class="text-xs font-semibold text-emerald-800">
+                        Motivo prefijado en «Otro (X)» + Especialidad «Imagenología»
+                    </span>
+                </div>
+
+                <!-- Fila 1: Datos de Origen SIC (Autorellenados y editables) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Servicio de Salud Origen (SIC)</label>
+                        <input type="text" id="sic_origen_ss" value="SSVQP" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Establecimiento Origen (SIC)</label>
+                        <input type="text" id="sic_origen_est" value="H. Peñablanca" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Especialidad Origen (SIC)</label>
+                        <input type="text" id="sic_origen_esp" value="Medicina" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Fila 2: Datos de Destino SIC (SSVQP / H. Quilpué / Imagenología) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Servicio de Salud Destino</label>
+                        <input type="text" id="sic_dest_ss" value="SSVQP" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Hospital Destino</label>
+                        <input type="text" id="sic_dest_hosp" value="H. Quilpué" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-900 mb-1">Especialidad Destino</label>
+                        <input type="text" id="sic_dest_esp" value="Imagenología" class="w-full px-3 py-1.5 text-sm border border-emerald-300 rounded-lg bg-white font-semibold focus:border-emerald-700 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Fila 3: Especificar Motivo "Otros" (TC solicitado) -->
+                <div class="bg-white p-3.5 rounded-lg border border-emerald-300">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold text-emerald-950">
+                            19. Motivo de Derivación: Marcará automáticamente «Otro (X)» — Especificar examen / solicitud:
+                        </label>
+                        <span class="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
+                            Coordenada X: 300, Y: 475
+                        </span>
+                    </div>
+                    <input type="text" id="sic_motivo_especificar" placeholder="Ej: Solicitud de TAC de Tórax-Abdomen-Pelvis c/c" class="w-full px-3 py-2 text-sm border border-emerald-400 rounded-lg focus:border-emerald-700 focus:outline-none">
+                </div>
+
+                <!-- Fila 4: Exámenes Realizados (Exclusivo de la Interconsulta) -->
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <label class="block text-xs font-bold text-emerald-950">
+                            24. Exámenes Realizados <span class="font-normal text-emerald-800">(Exclusivo para la Interconsulta; si ingresas Creatinina abajo puedes incluirla o detallar otros laboratorios)</span>
+                        </label>
+                        <span id="badge-fit-examenes" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-300 mono">
+                            SIC Exámenes: 0 / 5 líneas máx
+                        </span>
+                    </div>
+                    <textarea id="sic_examenes" rows="3" oninput="verificarLimitesTextoSIC()" placeholder="Ej: Crea 0.85 mg/dL, Hb 11.4 g/dL, PCR 45 mg/L, Rx Tórax previa..." class="w-full px-3 py-2 text-sm border border-emerald-300 rounded-lg bg-white focus:border-emerald-700 focus:outline-none"></textarea>
+                    <p id="alert-fit-examenes" class="hidden text-xs font-bold text-red-600 mt-1">
+                        ⚠️ El texto supera las 5 líneas del recuadro de Exámenes Realizados en la Interconsulta y se cortará al llegar al borde inferior.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================================== -->
+            <!-- SECCIÓN 4: MEDIO DE CONTRASTE, FUNCIÓN RENAL Y CONSENTIMIENTO (TAC) -->
+            <!-- =================================================================== -->
+            <section>
+                <div class="bg-amber-50 border-2 border-amber-200 rounded-xl p-5">
+                    <label class="block text-sm sm:text-base font-bold text-amber-900 mb-2.5">
+                        4. ¿El examen TAC requiere Medio de Contraste?
+                    </label>
+                    <div class="flex flex-wrap gap-6 items-center">
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-semibold text-slate-800">
+                            <input type="radio" name="contraste" value="NO" checked onchange="toggleContraste()" class="w-4 h-4 text-blue-600">
+                            <span>❌ NO (Orden Simple TAC - 1 Página)</span>
+                        </label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-semibold text-slate-800">
+                            <input type="radio" name="contraste" value="SI" onchange="toggleContraste()" class="w-4 h-4 text-blue-600">
+                            <span>💉 SÍ (Requiere Encuesta, Función Renal y Consentimiento - 3 a 4 Páginas)</span>
+                        </label>
+                    </div>
+
+                    <!-- Vía de administración -->
+                    <div id="via_contraste_container" class="hidden mt-4 pt-3.5 border-t border-amber-200">
+                        <label class="block text-xs font-bold text-amber-900 uppercase mb-2">Vía de administración del contraste:</label>
+                        <div class="flex flex-wrap gap-5 text-sm font-medium text-slate-800">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="via_contraste" value="EV" checked onchange="checkViaOtro()"> Endovenoso (EV)
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="via_contraste" value="ORAL" onchange="checkViaOtro()"> Oral
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="via_contraste" value="OTRO" onchange="checkViaOtro()"> Otro
+                            </label>
+                        </div>
+                        <div id="alerta_otro_contraste" class="hidden text-xs font-bold text-red-600 mt-2">
+                            ⚠️ Recuerda anotar a mano qué tipo de contraste es en el papel impreso.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-sección Función Renal y Consentimiento (Visible si lleva contraste) -->
+                <div id="secciones_extra" class="hidden mt-5 space-y-5">
+                    <div class="border-b-2 border-blue-700 pb-1">
+                        <h3 class="text-sm font-bold text-blue-800 uppercase">
+                            4.1 Datos de Función Renal y Protocolos (Orden TAC)
+                        </h3>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Creatinina Sérica (mg/dL)</label>
+                            <input type="number" step="0.01" id="crea" oninput="calcularTFG()" placeholder="En blanco si no tiene" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">¿Usa Metformina? (Pág 2)</label>
+                            <select id="metformina" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white">
+                                <option value="">Seleccionar...</option>
+                                <option value="SI">Sí</option>
+                                <option value="NO">No</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Protección Renal (Pág 4 - Anexo 3)</label>
+                            <select id="esquema_renal" onchange="document.getElementById('esquema_otro_container').classList.toggle('hidden', this.value !== 'OTRO')" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white">
+                                <option value="">Seleccionar...</option>
+                                <option value="SUERO">Sí (Suero fisiológico)</option>
+                                <option value="SIN">No (Sin esquema)</option>
+                                <option value="OTRO">Otro esquema...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="esquema_otro_container" class="hidden">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Detalle de «Otro» esquema de protección renal (Anexo 3)</label>
+                        <input type="text" id="esquema_otro_texto" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none">
+                    </div>
+
+                    <!-- Fecha Creatinina -->
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                        <label class="block text-xs font-bold text-emerald-900 uppercase mb-2">Fecha del Examen de Creatinina</label>
+                        <div class="flex flex-wrap gap-5 items-center text-sm">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-emerald-950">
+                                <input type="radio" name="crea_date_type" value="hoy" checked onchange="document.getElementById('fecha_crea_container').classList.add('hidden')">
+                                📅 Tomado hoy
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-emerald-950">
+                                <input type="radio" name="crea_date_type" value="distinta" onchange="document.getElementById('fecha_crea_container').classList.remove('hidden')">
+                                🗓️ Fecha distinta (DD/MM/AAAA)
+                            </label>
+                            <div id="fecha_crea_container" class="hidden">
+                                <input type="text" id="fecha_crea" placeholder="DD/MM/AAAA" maxlength="10" class="px-3 py-1 text-sm border border-emerald-400 rounded-md bg-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consentimiento Informado -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <label class="block text-xs font-bold text-blue-900 uppercase mb-2">¿Quién firma el Consentimiento Informado (Pág 3)?</label>
+                        <div class="flex flex-wrap gap-6 items-center text-sm">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-blue-950">
+                                <input type="radio" name="firma_consentimiento" value="paciente" checked onchange="document.getElementById('tutor_container').classList.add('hidden')">
+                                🧑 Paciente
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-blue-950">
+                                <input type="radio" name="firma_consentimiento" value="tutor" onchange="document.getElementById('tutor_container').classList.remove('hidden')">
+                                🤝 Cuidador / Tutor Legal
+                            </label>
+                        </div>
+
+                        <div id="tutor_container" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-blue-200">
+                            <div>
+                                <label class="block text-xs font-bold text-blue-900 mb-1">Nombre Completo del Cuidador / Tutor</label>
+                                <input type="text" id="nombre_tutor" class="w-full px-3 py-1.5 text-sm border border-blue-300 rounded-md bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-blue-900 mb-1">RUT del Cuidador / Tutor</label>
+                                <input type="text" id="rut_tutor" class="w-full px-3 py-1.5 text-sm border border-blue-300 rounded-md bg-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resultado CKD-EPI 2021 -->
+                    <div class="bg-slate-100 border-l-4 border-blue-700 p-4 rounded-r-lg flex items-center justify-between">
+                        <span class="text-sm font-semibold text-slate-700">
+                            eTFG Estimada (CKD-EPI 2021):
+                        </span>
+                        <span class="text-base font-bold text-blue-800 mono">
+                            <span id="etfg-result">--</span> mL/min/1.73m²
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =================================================================== -->
+            <!-- BOTONERA DE GENERACIÓN DE DOCUMENTOS                                -->
+            <!-- =================================================================== -->
+            <section class="pt-2 border-t border-slate-200">
+                <!-- Opciones de salida cuando es Hospitalizado -->
+                <div id="modo-descarga-hosp" class="hidden mb-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span class="font-bold text-slate-700">📄 Formato de entrega para Paciente Hospitalizado (TAC + Interconsulta):</span>
+                    <div class="flex flex-wrap items-center gap-4">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-emerald-900">
+                            <input type="radio" name="formato_salida_hosp" value="UNIFICADO" checked>
+                            📑 Un solo PDF combinado (Orden TAC + página de Interconsulta al final, listo para imprimir de una vez)
+                        </label>
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700">
+                            <input type="radio" name="formato_salida_hosp" value="SEPARADOS">
+                            📂 2 archivos PDF separados (`Orden_TAC.pdf` + `Interconsulta_SIC.pdf`)
+                        </label>
+                    </div>
+                </div>
+
+                <button type="button" id="btn-generar" onclick="generarDocumentosClinicos()" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold text-base py-3.5 px-6 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                    <span>🖨️</span>
+                    <span id="btn-generar-text">Generar Orden Médica TAC (1 Página)</span>
+                </button>
+
+                <div id="status" class="text-center mt-3 text-sm font-bold"></div>
+            </section>
+
+        </div>
+    </div>
+
+<script>
+    // =========================================================================
+    // 1. COORDENADAS DEFINITIVAS Y CALIBRADAS DE LA INTERCONSULTA (SIC V6)
+    // =========================================================================
+    const SIC_COORDS = {
+        hoy: [{x: 287, y: 770}, {x: 302, y: 770}, {x: 325, y: 770}, {x: 339, y: 770}, {x: 362, y: 770}, {x: 379, y: 770}, {x: 392, y: 770}, {x: 406, y: 770}],
+        nac: [{x: 211, y: 600}, {x: 225, y: 600}, {x: 245, y: 600}, {x: 260, y: 600}, {x: 279, y: 600}, {x: 294, y: 600}, {x: 306, y: 600}, {x: 324, y: 600}],
+        rut: [{x: 80, y: 635}, {x: 96, y: 635}, {x: 111, y: 635}, {x: 124, y: 635}, {x: 140, y: 635}, {x: 157, y: 635}, {x: 170, y: 635}, {x: 182, y: 635}],
+        dv: {x: 211, y: 635},
+        ficha: [{x: 445, y: 690}, {x: 460, y: 690}, {x: 475, y: 690}, {x: 490, y: 690}, {x: 505, y: 690}, {x: 520, y: 690}, {x: 535, y: 690}, {x: 550, y: 690}, {x: 565, y: 690}],
+        edad: [{x: 444, y: 605}, {x: 456, y: 605}, {x: 473, y: 605}],
+        check_anos: {x: 490, y: 610},
+        rut_med: [{x: 82, y: 25}, {x: 99, y: 25}, {x: 113, y: 25}, {x: 127, y: 25}, {x: 142, y: 25}, {x: 156, y: 25}, {x: 170, y: 25}, {x: 185, y: 25}],
+        dv_med: {x: 213, y: 25},
+        origen_ss: {x: 40, y: 740},
+        origen_est: {x: 270, y: 740},
+        origen_esp: {x: 40, y: 715},
+        origen_uni: {x: 325, y: 715},
+        pac_ap: {x: 50, y: 670},
+        pac_am: {x: 220, y: 670},
+        pac_nom: {x: 360, y: 670},
+        sexo_M: {x: 100, y: 610},
+        sexo_F: {x: 100, y: 600},
+        dest_ss: {x: 80, y: 505},
+        dest_hosp: {x: 200, y: 505},
+        dest_esp: {x: 380, y: 505},
+        motivo_CONF: {x: 165, y: 485},
+        motivo_TRAT: {x: 165, y: 475},
+        motivo_SEG: {x: 220, y: 485},
+        motivo_OTRO: {x: 220, y: 475},
+        motivo_especificar: {x: 300, y: 475},
+        med_ap: {x: 45, y: 55},
+        med_am: {x: 210, y: 55},
+        med_nom: {x: 350, y: 55},
+        boxes: {
+            hipotesis: { x: 45, y: 445, xMax: 570, yBottom: 340, fontSize: 8.5, lineHeight: 10.5 },
+            fundamentos: { x: 45, y: 230, xMax: 570, yBottom: 180, fontSize: 8.5, lineHeight: 10.5 },
+            examenes: { x: 45, y: 145, xMax: 570, yBottom: 95, fontSize: 8.5, lineHeight: 10.5 }
+        }
+    };
+
+    // =========================================================================
+    // 2. MEMORIA LOCAL (IndexedDB + localStorage) PARA PDFs Y DATOS DEL MÉDICO
+    // =========================================================================
+    const DB_NAME = 'SICv6_Studio_Cache';
+    const STORE_NAME = 'pdf_store';
+
+    function openCacheDB() {
+        return new Promise((resolve, reject) => {
+            try {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            } catch (err) { reject(err); }
+        });
+    }
+
+    async function savePdfInDB(key, base64Data, rotation = 0) {
+        try {
+            const db = await openCacheDB();
+            await new Promise((resolve) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).put({ base64Data, rotationAngle: rotation }, key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => resolve();
+            });
+        } catch (e) {}
+    }
+
+    async function getPdfFromDB(key) {
+        try {
+            const db = await openCacheDB();
+            return await new Promise((resolve) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get(key);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+        } catch (e) { return null; }
+    }
+
+    function isBase64Valid(str) {
+        return str && str.length > 200 && !str.includes("PLACEHOLDER");
+    }
+
+    window.onload = async function() {
+        restoreDoctorData();
+        setupDateMasks();
+
+        // Intentar recuperar los PDFs desde IndexedDB si aún no están incrustados en el HTML
+        if (!isBase64Valid(embeddedTacBase64)) {
+            const cachedTac = await getPdfFromDB('cached_tac_pdf');
+            if (cachedTac && cachedTac.base64Data) {
+                embeddedTacBase64 = cachedTac.base64Data;
+            }
+        }
+        if (!isBase64Valid(embeddedSicBase64)) {
+            const cachedSic = await getPdfFromDB('cached_sic_pdf');
+            if (cachedSic && cachedSic.base64Data) {
+                embeddedSicBase64 = cachedSic.base64Data;
+                if (typeof cachedSic.rotationAngle === 'number') {
+                    embeddedSicRotation = cachedSic.rotationAngle;
+                }
+            }
+        }
+
+        document.getElementById('sic-rot-label').innerText = `${embeddedSicRotation}°`;
+        refreshPdfStatusUI();
+        verificarLimitesTextoSIC();
+    };
+
+    function refreshPdfStatusUI() {
+        const hasTac = isBase64Valid(embeddedTacBase64);
+        const hasSic = isBase64Valid(embeddedSicBase64);
+
+        const badgeTac = document.getElementById('badge-tac-status');
+        const badgeSic = document.getElementById('badge-sic-status');
+
+        if (hasTac) {
+            badgeTac.className = "text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300";
+            badgeTac.innerText = "✅ Cargado";
+        } else {
+            badgeTac.className = "text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800";
+            badgeTac.innerText = "Pendiente";
+        }
+
+        if (hasSic) {
+            badgeSic.className = "text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300";
+            badgeSic.innerText = `✅ Cargado (${embeddedSicRotation}°)`;
+        } else {
+            badgeSic.className = "text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800";
+            badgeSic.innerText = "Pendiente";
+        }
+
+        if (hasTac && hasSic) {
+            document.getElementById('setup-section').classList.add('hidden');
+            document.getElementById('ready-banner').classList.remove('hidden');
+        }
+    }
+
+    function toggleSetupModal() {
+        document.getElementById('setup-section').classList.toggle('hidden');
+    }
+
+    function handlePdfUpload(type, inputEl) {
+        if (!inputEl.files || inputEl.files.length === 0) return;
+        const file = inputEl.files[0];
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const b64 = e.target.result;
+            if (type === 'TAC') {
+                embeddedTacBase64 = b64;
+                await savePdfInDB('cached_tac_pdf', b64, 0);
+            } else {
+                embeddedSicBase64 = b64;
+                // Detectar si el PDF de la SIC trae rotación en metadatos (/Rotate)
+                try {
+                    const clean = b64.split(',')[1];
+                    const bin = window.atob(clean);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    const doc = await PDFLib.PDFDocument.load(bytes);
+                    const rot = ((doc.getPages()[0].getRotation().angle % 360) + 360) % 360;
+                    embeddedSicRotation = rot;
+                    document.getElementById('sic-rot-label').innerText = `${embeddedSicRotation}°`;
+                } catch (err) {}
+                await savePdfInDB('cached_sic_pdf', b64, embeddedSicRotation);
+            }
+            refreshPdfStatusUI();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function rotateSicOrientation(delta) {
+        embeddedSicRotation = (embeddedSicRotation + delta) % 360;
+        document.getElementById('sic-rot-label').innerText = `${embeddedSicRotation}°`;
+        if (isBase64Valid(embeddedSicBase64)) {
+            await savePdfInDB('cached_sic_pdf', embeddedSicBase64, embeddedSicRotation);
+        }
+        refreshPdfStatusUI();
+    }
+
+    function compileDualPortableApp() {
+        const feedback = document.getElementById('setup-feedback');
+        if (!isBase64Valid(embeddedTacBase64) || !isBase64Valid(embeddedSicBase64)) {
+            feedback.className = "text-xs font-bold text-red-600";
+            feedback.innerText = "⚠️ Por favor sube ambos archivos PDF (1. Orden de TAC y 2. Interconsulta SIC) antes de descargar la App Portátil.";
+            return;
+        }
+
+        const scriptEl = document.getElementById('embedded-pdfs-script');
+        scriptEl.textContent = `\n        let embeddedTacBase64 = \`${embeddedTacBase64}\`;\n        let embeddedSicBase64 = \`${embeddedSicBase64}\`;\n        let embeddedSicRotation = ${embeddedSicRotation};\n    `;
+
+        const fullHtml = "<!DOCTYPE html>\n<html lang=\"es\">\n" + document.documentElement.innerHTML + "\n</html>";
+        const blob = new Blob([fullHtml], { type: "text/html" });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = "App_Unificada_TAC_SIC_Peñablanca.html";
+        link.click();
+
+        feedback.className = "text-xs font-bold text-emerald-800";
+        feedback.innerText = "✅ ¡App Portátil Unificada descargada! Ya incluye ambos PDFs en Base64 para alojar en GitHub Pages o usar sin conexión.";
+    }
+
+    // =========================================================================
+    // 3. LÓGICA DE FORMULARIO, PERSISTENCIA DEL MÉDICO Y VALIDACIÓN DE CAJAS
+    // =========================================================================
+    function persistDoctorData() {
+        try {
+            const docData = {
+                nom: document.getElementById('med_nom').value,
+                ap: document.getElementById('med_ap').value,
+                am: document.getElementById('med_am').value,
+                rut: document.getElementById('med_rut').value
+            };
+            localStorage.setItem('hpb_medico_solicitante', JSON.stringify(docData));
+        } catch (e) {}
+    }
+
+    function restoreDoctorData() {
+        try {
+            const raw = localStorage.getItem('hpb_medico_solicitante');
+            if (!raw) return;
+            const docData = JSON.parse(raw);
+            if (docData.nom) document.getElementById('med_nom').value = docData.nom;
+            if (docData.ap) document.getElementById('med_ap').value = docData.ap;
+            if (docData.am) document.getElementById('med_am').value = docData.am;
+            if (docData.rut) document.getElementById('med_rut').value = docData.rut;
+        } catch (e) {}
+    }
+
+    function setupDateMasks() {
+        function applyMask(e) {
+            let v = e.target.value.replace(/\D/g, '');
+            if (v.length > 8) v = v.slice(0, 8);
+            if (v.length >= 5) e.target.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+            else if (v.length >= 3) e.target.value = v.slice(0, 2) + '/' + v.slice(2);
+            else e.target.value = v;
+        }
+
+        document.getElementById('fecha_nac').addEventListener('input', function(e) {
+            applyMask(e);
+            calcularEdad();
+        });
+        document.getElementById('fecha_crea').addEventListener('input', applyMask);
+    }
+
+    function calcularEdad() {
+        const fechaNacInput = document.getElementById('fecha_nac').value;
+        if (fechaNacInput && fechaNacInput.length === 10) {
+            const parts = fechaNacInput.split('/');
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const y = parseInt(parts[2], 10);
+            const nac = new Date(y, m - 1, d);
+            const hoy = new Date();
+            let edad = hoy.getFullYear() - nac.getFullYear();
+            const mes = hoy.getMonth() - nac.getMonth();
+            if (mes < 0 || (mes === 0 && hoy.getDate() < nac.getDate())) edad--;
+            document.getElementById('edad').value = edad >= 0 ? edad : 0;
+            calcularTFG();
+        }
+    }
+
+    function actualizarOrigenYMenuSIC() {
+        const origen = document.getElementById('origen').value;
+        const servicioInput = document.getElementById('servicio');
+        const hospPanel = document.getElementById('hospitalizado-sic-panel');
+        const modoDescargaHosp = document.getElementById('modo-descarga-hosp');
+
+        if (origen === 'URG') {
+            servicioInput.value = 'Urgencias HPB';
+            hospPanel.classList.add('hidden');
+            modoDescargaHosp.classList.add('hidden');
+        } else if (origen === 'HOSP') {
+            servicioInput.value = 'Medicina HPB';
+            hospPanel.classList.remove('hidden');
+            modoDescargaHosp.classList.remove('hidden');
+        } else {
+            servicioInput.value = '';
+            hospPanel.classList.add('hidden');
+            modoDescargaHosp.classList.add('hidden');
+        }
+        actualizarTextoBotonPrincipal();
+    }
+
+    function toggleContraste() {
+        const llevaContraste = document.querySelector('input[name="contraste"]:checked').value === 'SI';
+        document.getElementById('secciones_extra').classList.toggle('hidden', !llevaContraste);
+        document.getElementById('via_contraste_container').classList.toggle('hidden', !llevaContraste);
+        actualizarTextoBotonPrincipal();
+    }
+
+    function checkViaOtro() {
+        const via = document.querySelector('input[name="via_contraste"]:checked').value;
+        document.getElementById('alerta_otro_contraste').classList.toggle('hidden', via !== 'OTRO');
+    }
+
+    function actualizarTextoBotonPrincipal() {
+        const llevaContraste = document.querySelector('input[name="contraste"]:checked').value === 'SI';
+        const esHospitalizado = document.getElementById('origen').value === 'HOSP';
+        const btn = document.getElementById('btn-generar');
+        const btnText = document.getElementById('btn-generar-text');
+
+        if (esHospitalizado) {
+            btn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-base py-3.5 px-6 rounded-xl shadow-md transition flex items-center justify-center gap-2";
+            btnText.innerText = llevaContraste
+                ? "Generar Orden TAC con Contraste + Interconsulta (SIC)"
+                : "Generar Orden TAC Simple + Interconsulta (SIC)";
+        } else {
+            btn.className = llevaContraste
+                ? "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base py-3.5 px-6 rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                : "w-full bg-blue-700 hover:bg-blue-800 text-white font-bold text-base py-3.5 px-6 rounded-xl shadow-md transition flex items-center justify-center gap-2";
+            btnText.innerText = llevaContraste
+                ? "Generar Orden TAC con Contraste (3 a 4 Páginas)"
+                : "Generar Orden Médica TAC (1 Página)";
+        }
+    }
+
+    function calcularTFG() {
+        const edad = parseFloat(document.getElementById('edad').value);
+        const sexo = document.getElementById('sexo').value;
+        const crea = parseFloat(document.getElementById('crea').value);
+        const resultSpan = document.getElementById('etfg-result');
+
+        if (!edad || !sexo || !crea) {
+            resultSpan.innerText = "--";
+            return;
+        }
+
+        const kappa = sexo === 'F' ? 0.7 : 0.9;
+        const alpha = sexo === 'F' ? -0.241 : -0.302;
+        const genderMultiplier = sexo === 'F' ? 1.012 : 1;
+        const cr_kappa = crea / kappa;
+        const egfr = 142 * Math.pow(Math.min(cr_kappa, 1), alpha) * Math.pow(Math.max(cr_kappa, 1), -1.200) * Math.pow(0.9938, edad) * genderMultiplier;
+
+        resultSpan.innerText = egfr.toFixed(1);
+    }
+
+    // Verifica en tiempo real cuántas líneas ocupan Diagnóstico, Antecedentes y Exámenes respecto a las cajas de la SIC
+    function verificarLimitesTextoSIC() {
+        const mapping = [
+            { inputId: 'diagnostico', boxKey: 'hipotesis', badgeId: 'badge-fit-diagnostico', alertId: 'alert-fit-diagnostico', label: 'SIC Hipótesis' },
+            { inputId: 'antecedentes', boxKey: 'fundamentos', badgeId: 'badge-fit-antecedentes', alertId: 'alert-fit-antecedentes', label: 'SIC Fundamentos' },
+            { inputId: 'sic_examenes', boxKey: 'examenes', badgeId: 'badge-fit-examenes', alertId: 'alert-fit-examenes', label: 'SIC Exámenes' }
+        ];
+
+        mapping.forEach(item => {
+            const el = document.getElementById(item.inputId);
+            const badge = document.getElementById(item.badgeId);
+            const alertEl = document.getElementById(item.alertId);
+            const cfg = SIC_COORDS.boxes[item.boxKey];
+            if (!el || !badge || !alertEl || !cfg) return;
+
+            const maxLines = Math.max(1, Math.floor((cfg.y - cfg.yBottom) / cfg.lineHeight) + 1);
+            const approxCharsPerLine = Math.floor((cfg.xMax - cfg.x) / (cfg.fontSize * 0.51));
+            const rawText = el.value || '';
+
+            let usedLines = 0;
+            if (rawText.trim().length > 0) {
+                const paragraphs = rawText.split(/\r?\n/);
+                paragraphs.forEach(p => {
+                    if (!p.trim()) {
+                        usedLines += 1;
+                    } else {
+                        usedLines += Math.max(1, Math.ceil(p.length / approxCharsPerLine));
+                    }
+                });
+            }
+
+            badge.innerText = `${item.label}: ${usedLines} / ${maxLines} líneas máx`;
+            if (usedLines > maxLines) {
+                badge.className = "text-[11px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 mono";
+                alertEl.classList.remove('hidden');
+                el.classList.add('border-red-500', 'bg-red-50/20');
+            } else {
+                badge.className = "text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 mono";
+                alertEl.classList.add('hidden');
+                el.classList.remove('border-red-500', 'bg-red-50/20');
+            }
+        });
+    }
+
+    function fillDemoValues() {
+        document.getElementById('pac_nom').value = "Juan Carlos";
+        document.getElementById('pac_ap').value = "González";
+        document.getElementById('pac_am').value = "Tapia";
+        document.getElementById('rut').value = "12345678-K";
+        document.getElementById('ficha').value = "45892-1";
+        document.getElementById('sexo').value = "M";
+        document.getElementById('fecha_nac').value = "14/05/1958";
+        calcularEdad();
+
+        document.getElementById('origen').value = "HOSP";
+        actualizarOrigenYMenuSIC();
+
+        document.getElementById('med_nom').value = "Sebastián Andrés";
+        document.getElementById('med_ap').value = "Rojas";
+        document.getElementById('med_am').value = "Valdés";
+        document.getElementById('med_rut').value = "16543210-9";
+
+        document.getElementById('diagnostico').value = "1. Síndrome febril prolongado en estudio\n2. Sospecha de colección intraabdominal";
+        document.getElementById('antecedentes').value = "Paciente de 68 años hospitalizado en Medicina HPB, cursando 5° día de fiebre y dolor en fosa ilíaca derecha. Antecedente de colecistectomía hace 2 años.";
+        document.getElementById('sic_motivo_especificar').value = "TAC de Abdomen y Pelvis con contraste EV";
+        document.getElementById('sic_examenes').value = "Crea 0.88 mg/dL, PCR 142 mg/L, Leucocitos 14.800/mm3, Ecografía abdominal no concluyente.";
+
+        verificarLimitesTextoSIC();
+    }
+
+    // =========================================================================
+    // 4. MOTOR PDF 1: GENERADOR DE ORDEN DE TAC (LÓGICA V22 INTACTA)
+    // =========================================================================
+    function safeCheckRadio(form, name, index) {
+        try {
+            const group = form.getRadioGroup(name);
+            const options = group.getOptions();
+            if (options.length > index) group.select(options[index]);
+        } catch (e) {}
+    }
+
+    function safeCheckField(form, name) {
+        try {
+            const cb = form.getCheckBox(name);
+            cb.check();
+        } catch (e) {
+            try {
+                const group = form.getRadioGroup(name);
+                const options = group.getOptions();
+                if (options.length > 0) group.select(options[0]);
+            } catch (e2) {}
+        }
+    }
+
+    async function construirPdfTAC() {
+        const base64Data = embeddedTacBase64.includes(',') ? embeddedTacBase64.split(',')[1] : embeddedTacBase64;
+        const binaryString = window.atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+        const pdfDoc = await PDFLib.PDFDocument.load(bytes.buffer);
+        const form = pdfDoc.getForm();
+        const llevaContraste = document.querySelector('input[name="contraste"]:checked').value === 'SI';
+
+        // Parche interno AcroForm para Metformina (Group11)
+        try {
+            const metfGroup = form.getRadioGroup('Group11');
+            metfGroup.acroField.dict.delete(PDFLib.PDFName.of('Opt'));
+        } catch (e) {}
+
+        // 1. Cruces con lectura dinámica
+        const sexoUI = document.getElementById('sexo').value;
+        if (sexoUI === 'F') safeCheckRadio(form, 'Button12', 0);
+        if (sexoUI === 'M') safeCheckRadio(form, 'Button12', 1);
+
+        const origenUI = document.getElementById('origen').value;
+        if (origenUI === 'AMB') safeCheckRadio(form, 'Button9', 0);
+        if (origenUI === 'URG') safeCheckRadio(form, 'Button9', 1);
+        if (origenUI === 'HOSP') safeCheckRadio(form, 'Button9', 2);
+
+        if (llevaContraste) {
+            safeCheckRadio(form, 'Button15', 0);
+            const viaContraste = document.querySelector('input[name="via_contraste"]:checked').value;
+            if (viaContraste === 'EV') safeCheckField(form, 'Button16');
+            if (viaContraste === 'ORAL') safeCheckField(form, 'Button17');
+
+            const metforminaUI = document.getElementById('metformina').value;
+            if (metforminaUI === 'SI') safeCheckRadio(form, 'Group11', 0);
+            if (metforminaUI === 'NO') safeCheckRadio(form, 'Group11', 1);
+        } else {
+            safeCheckRadio(form, 'Button15', 1);
+        }
+
+        // 2. Fechas lógicas
+        const today = new Date();
+        const diaHoy = String(today.getDate()).padStart(2, '0');
+        const mesHoy = String(today.getMonth() + 1).padStart(2, '0');
+        const anioHoy = String(today.getFullYear());
+        const anioCortoHoy = anioHoy.slice(-2);
+        const fechaActual = `${diaHoy}/${mesHoy}/${anioHoy}`;
+        const horaActual = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
+        const fechaHoraActual = `${fechaActual} ${horaActual}`;
+
+        let diaCrea = diaHoy, mesCrea = mesHoy, anioCrea = anioCortoHoy;
+        if (llevaContraste) {
+            const creaType = document.querySelector('input[name="crea_date_type"]:checked').value;
+            if (creaType === 'distinta') {
+                const fCrea = document.getElementById('fecha_crea').value;
+                if (fCrea && fCrea.length === 10) {
+                    const parts = fCrea.split('/');
+                    diaCrea = parts[0];
+                    mesCrea = parts[1];
+                    anioCrea = parts[2].slice(-2);
+                }
+            }
+        }
+
+        // 3. Concatenación automática "Nombres ApellidoPaterno ApellidoMaterno" para Orden TAC
+        const nombreCompletoPaciente = [
+            document.getElementById('pac_nom').value.trim(),
+            document.getElementById('pac_ap').value.trim(),
+            document.getElementById('pac_am').value.trim()
+        ].filter(Boolean).join(' ');
+
+        const nombreCompletoMedico = [
+            document.getElementById('med_nom').value.trim(),
+            document.getElementById('med_ap').value.trim(),
+            document.getElementById('med_am').value.trim()
+        ].filter(Boolean).join(' ');
+
+        const data = {
+            nombre: nombreCompletoPaciente,
+            rut: document.getElementById('rut').value || '',
+            fecha_nac: document.getElementById('fecha_nac').value || '',
+            edad: document.getElementById('edad').value || '',
+            ficha: document.getElementById('ficha').value || '',
+            servicio: document.getElementById('servicio').value || '',
+            diagnostico: document.getElementById('diagnostico').value || '',
+            antecedentes: document.getElementById('antecedentes').value || '',
+            crea: document.getElementById('crea').value || '',
+            etfg: document.getElementById('etfg-result').innerText !== '--' ? document.getElementById('etfg-result').innerText : '',
+            medico: nombreCompletoMedico
+        };
+
+        const mapaPDF = {
+            'Text1': data.nombre, 'Text2': data.rut, 'Text3': data.fecha_nac,
+            'Text4': data.edad, 'Text5': data.ficha, 'Text7': data.servicio,
+            'Text10': data.diagnostico, 'Text11': data.antecedentes,
+            'Text19': '', 'Text20': fechaHoraActual, 'Text21': data.medico,
+            'Text23': '', 'Text24': ''
+        };
+
+        let requiereAnexo3 = false;
+
+        if (llevaContraste) {
+            mapaPDF['NOMBRE'] = data.nombre; mapaPDF['RUT'] = data.rut; mapaPDF['EDAD'] = data.edad;
+            mapaPDF['Texto9'] = diaHoy; mapaPDF['Texto10'] = mesHoy; mapaPDF['Texto11'] = anioCortoHoy;
+            mapaPDF['Texto8'] = data.medico; mapaPDF['Textbox66'] = fechaActual; mapaPDF['Textbox67'] = data.medico;
+            mapaPDF['text_0'] = data.medico; mapaPDF['text_1'] = data.nombre; mapaPDF['text_2'] = data.rut;
+
+            const hasCrea = (data.crea !== '');
+            const etfgValue = parseFloat(data.etfg);
+            const isEtfgBajo = (hasCrea && etfgValue < 30);
+            requiereAnexo3 = !hasCrea || isEtfgBajo;
+
+            if (hasCrea) {
+                mapaPDF['Texto3'] = data.crea; mapaPDF['Texto4'] = diaCrea; mapaPDF['Texto5'] = mesCrea;
+                mapaPDF['Texto6'] = anioCrea; mapaPDF['Texto2'] = data.etfg;
+            }
+
+            try {
+                if (!hasCrea) form.getCheckBox('checkbox_4').check();
+                else if (isEtfgBajo) form.getCheckBox('checkbox_5').check();
+
+                const esquemaUI = document.getElementById('esquema_renal').value;
+                if (esquemaUI === 'SUERO') form.getCheckBox('checkbox_6').check();
+                else if (esquemaUI === 'SIN') form.getCheckBox('checkbox_8').check();
+                else if (esquemaUI === 'OTRO') {
+                    form.getCheckBox('checkbox_7').check();
+                    mapaPDF['text_9'] = document.getElementById('esquema_otro_texto').value;
+                }
+            } catch (e) {}
+
+            const firmaConsentimiento = document.querySelector('input[name="firma_consentimiento"]:checked').value;
+            if (firmaConsentimiento === 'tutor') {
+                mapaPDF['Textbox60'] = document.getElementById('nombre_tutor').value || '';
+                mapaPDF['Textbox61'] = document.getElementById('rut_tutor').value || '';
+                mapaPDF['Textbox62'] = data.nombre;
+                mapaPDF['Textbox63'] = data.rut;
+            } else {
+                mapaPDF['Textbox60'] = data.nombre; mapaPDF['Textbox61'] = data.rut;
+                mapaPDF['Textbox62'] = ''; mapaPDF['Textbox63'] = '';
+            }
+        }
+
+        const fields = form.getFields();
+        fields.forEach(field => {
+            if (typeof field.setText === 'function') {
+                const name = field.getName();
+                try {
+                    if (mapaPDF[name] !== undefined) {
+                        field.setText(String(mapaPDF[name]));
+                    }
+                } catch (e) {}
+            }
+        });
+
+        // Corte de páginas inteligente V22
+        if (!llevaContraste) {
+            pdfDoc.removePage(3);
+            pdfDoc.removePage(2);
+            pdfDoc.removePage(1);
+        } else if (!requiereAnexo3) {
+            pdfDoc.removePage(3);
+        }
+
+        return { pdfDoc, nombreCompletoPaciente, llevaContraste, requiereAnexo3 };
+    }
+
+    // =========================================================================
+    // 5. MOTOR PDF 2: GENERADOR DE INTERCONSULTA (SIC V6 CALIBRADO)
+    // =========================================================================
+    function safeDrawTextSIC(page, text, mappedX, mappedY, size, font) {
+        if (!text) return;
+        const pdfWidth = page.getWidth();
+        const pdfHeight = page.getHeight();
+        const actualX = (mappedX / 595) * pdfWidth;
+        const actualY = pdfHeight - (((842 - mappedY) / 842) * pdfHeight);
+        page.drawText(String(text), { x: actualX, y: actualY, size: size, font: font });
+    }
+
+    function safeDrawMultilineBoxSIC(page, text, cfg, font) {
+        if (!text || !String(text).trim()) return;
+        const pdfWidth = page.getWidth();
+        const pdfHeight = page.getHeight();
+
+        const actualX = (cfg.x / 595) * pdfWidth;
+        const scaledMaxWidth = ((cfg.xMax - cfg.x) / 595) * pdfWidth;
+        const scaledLineHeight = (cfg.lineHeight / 842) * pdfHeight;
+
+        let currentY = pdfHeight - (((842 - cfg.y) / 842) * pdfHeight);
+        const minY = pdfHeight - (((842 - cfg.yBottom) / 842) * pdfHeight);
+
+        const paragraphs = String(text).split(/\r?\n/);
+        const lines = [];
+
+        for (let p = 0; p < paragraphs.length; p++) {
+            const words = paragraphs[p].split(/\s+/).filter(Boolean);
+            if (words.length === 0) {
+                lines.push('');
+                continue;
+            }
+            let currentLine = '';
+            for (let i = 0; i < words.length; i++) {
+                const testLine = currentLine ? (currentLine + ' ' + words[i]) : words[i];
+                if (font.widthOfTextAtSize(testLine, cfg.fontSize) > scaledMaxWidth && currentLine !== '') {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            if (currentLine) lines.push(currentLine);
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            if (currentY < minY - 0.5) break; // Corta exactamente al llegar al borde inferior del recuadro
+            if (lines[i] !== '') {
+                page.drawText(lines[i], { x: actualX, y: currentY, size: cfg.fontSize, font: font });
+            }
+            currentY -= scaledLineHeight;
+        }
+    }
+
+    function parseRutForSIC(rawVal) {
+        const clean = (rawVal || '').replace(/[^0-9kK]/g, '').toUpperCase();
+        if (clean.length < 2) return null;
+        return {
+            num: clean.slice(0, -1).padStart(8, '0'),
+            dv: clean.slice(-1)
+        };
+    }
+
+    async function construirPdfSIC() {
+        const base64Data = embeddedSicBase64.includes(',') ? embeddedSicBase64.split(',')[1] : embeddedSicBase64;
+        const binaryString = window.atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+        const srcDoc = await PDFLib.PDFDocument.load(bytes.buffer);
+        const pdfDoc = await PDFLib.PDFDocument.create();
+        const [embeddedPage] = await pdfDoc.embedPdf(srcDoc);
+
+        const w = embeddedPage.width;
+        const h = embeddedPage.height;
+        const rot = embeddedSicRotation || 0;
+
+        let page;
+        if (rot === 180) {
+            page = pdfDoc.addPage([w, h]);
+            page.drawPage(embeddedPage, { x: w, y: h, width: w, height: h, rotate: PDFLib.degrees(180) });
+        } else if (rot === 90) {
+            page = pdfDoc.addPage([h, w]);
+            page.drawPage(embeddedPage, { x: 0, y: w, width: w, height: h, rotate: PDFLib.degrees(-90) });
+        } else if (rot === 270) {
+            page = pdfDoc.addPage([h, w]);
+            page.drawPage(embeddedPage, { x: h, y: 0, width: w, height: h, rotate: PDFLib.degrees(90) });
+        } else {
+            page = pdfDoc.addPage([w, h]);
+            page.drawPage(embeddedPage, { x: 0, y: 0, width: w, height: h });
+        }
+
+        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+        const boldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+        const size = 11;
+        const digitSize = 12;
+        const C = SIC_COORDS;
+
+        // 1. Fecha de Solicitud (Hoy)
+        const d = new Date();
+        const hoyStr = String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear());
+        for (let i = 0; i < 8; i++) safeDrawTextSIC(page, hoyStr[i], C.hoy[i].x, C.hoy[i].y, digitSize, boldFont);
+
+        // 2. Datos de Origen (Toma Unidad desde el campo compartido "servicio")
+        safeDrawTextSIC(page, (document.getElementById('sic_origen_ss').value || '').toUpperCase(), C.origen_ss.x, C.origen_ss.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('sic_origen_est').value || '').toUpperCase(), C.origen_est.x, C.origen_est.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('sic_origen_esp').value || '').toUpperCase(), C.origen_esp.x, C.origen_esp.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('servicio').value || 'MEDICINA HPB').toUpperCase(), C.origen_uni.x, C.origen_uni.y, size, font);
+
+        // 3. Paciente (Ordenado según casillas SIC: Apellido Paterno | Apellido Materno | Nombres)
+        safeDrawTextSIC(page, (document.getElementById('pac_ap').value || '').toUpperCase(), C.pac_ap.x, C.pac_ap.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('pac_am').value || '').toUpperCase(), C.pac_am.x, C.pac_am.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('pac_nom').value || '').toUpperCase(), C.pac_nom.x, C.pac_nom.y, size, font);
+
+        // 4. Historia Clínica / Ficha (9 casillas, incluyendo números, '-' y '/')
+        const fichaRaw = (document.getElementById('ficha').value || '').replace(/\s+/g, '').toUpperCase();
+        if (fichaRaw) {
+            for (let i = 0; i < Math.min(fichaRaw.length, C.ficha.length); i++) {
+                safeDrawTextSIC(page, fichaRaw[i], C.ficha[i].x, C.ficha[i].y, digitSize, boldFont);
+            }
+        }
+
+        // 5. RUT Paciente
+        const pacRut = parseRutForSIC(document.getElementById('rut').value);
+        if (pacRut) {
+            for (let i = 0; i < 8; i++) safeDrawTextSIC(page, pacRut.num[i], C.rut[i].x, C.rut[i].y, digitSize, boldFont);
+            safeDrawTextSIC(page, pacRut.dv, C.dv.x, C.dv.y, digitSize, boldFont);
+        }
+
+        // 6. Sexo, Fecha Nacimiento y Edad
+        const sexo = document.getElementById('sexo').value;
+        if (sexo === 'M') safeDrawTextSIC(page, 'X', C.sexo_M.x, C.sexo_M.y, 14, boldFont);
+        if (sexo === 'F') safeDrawTextSIC(page, 'X', C.sexo_F.x, C.sexo_F.y, 14, boldFont);
+
+        const nacClean = (document.getElementById('fecha_nac').value || '').replace(/\D/g, '');
+        if (nacClean.length === 8) {
+            for (let i = 0; i < 8; i++) safeDrawTextSIC(page, nacClean[i], C.nac[i].x, C.nac[i].y, digitSize, boldFont);
+        }
+
+        const edadVal = document.getElementById('edad').value;
+        if (edadVal !== '') {
+            const edadStr = String(edadVal).padStart(3, ' ');
+            for (let i = 0; i < 3; i++) {
+                if (edadStr[i] !== ' ') safeDrawTextSIC(page, edadStr[i], C.edad[i].x, C.edad[i].y, digitSize, boldFont);
+            }
+            safeDrawTextSIC(page, 'X', C.check_anos.x, C.check_anos.y, 14, boldFont);
+        }
+
+        // 7. Destino (SSVQP | H. Quilpué | Imagenología) y Motivo (Siempre marca "Otro" + texto libre)
+        safeDrawTextSIC(page, (document.getElementById('sic_dest_ss').value || '').toUpperCase(), C.dest_ss.x, C.dest_ss.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('sic_dest_hosp').value || '').toUpperCase(), C.dest_hosp.x, C.dest_hosp.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('sic_dest_esp').value || '').toUpperCase(), C.dest_esp.x, C.dest_esp.y, size, font);
+
+        safeDrawTextSIC(page, 'X', C.motivo_OTRO.x, C.motivo_OTRO.y, 14, boldFont);
+        safeDrawTextSIC(page, (document.getElementById('sic_motivo_especificar').value || ''), C.motivo_especificar.x, C.motivo_especificar.y, size, font);
+
+        // 8. Textos largos con auto-corte en las 4 coordenadas del recuadro:
+        //    - Hipótesis Diagnóstica <- Diagnóstico de TAC
+        //    - Fundamentos del Diagnóstico <- Antecedentes Clínicos y Quirúrgicos de TAC
+        //    - Exámenes Realizados <- Casilla exclusiva de Exámenes SIC
+        safeDrawMultilineBoxSIC(page, document.getElementById('diagnostico').value, C.boxes.hipotesis, font);
+        safeDrawMultilineBoxSIC(page, document.getElementById('antecedentes').value, C.boxes.fundamentos, font);
+        safeDrawMultilineBoxSIC(page, document.getElementById('sic_examenes').value, C.boxes.examenes, font);
+
+        // 9. Médico Solicitante (Ordenado: Apellido Paterno | Apellido Materno | Nombres + RUT)
+        safeDrawTextSIC(page, (document.getElementById('med_ap').value || '').toUpperCase(), C.med_ap.x, C.med_ap.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('med_am').value || '').toUpperCase(), C.med_am.x, C.med_am.y, size, font);
+        safeDrawTextSIC(page, (document.getElementById('med_nom').value || '').toUpperCase(), C.med_nom.x, C.med_nom.y, size, font);
+
+        const medRut = parseRutForSIC(document.getElementById('med_rut').value);
+        if (medRut) {
+            for (let i = 0; i < 8; i++) safeDrawTextSIC(page, medRut.num[i], C.rut_med[i].x, C.rut_med[i].y, digitSize, boldFont);
+            safeDrawTextSIC(page, medRut.dv, C.dv_med.x, C.dv_med.y, digitSize, boldFont);
+        }
+
+        return pdfDoc;
+    }
+
+    // =========================================================================
+    // 6. ORQUESTADOR DE DESCARGA (SOLO TAC O TAC + INTERCONSULTA EN HOSP)
+    // =========================================================================
+    function triggerPdfDownload(pdfBytes, filename) {
+        const blob = new Blob([pdfBytes], { type: "application/pdf" });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }
+
+    async function generarDocumentosClinicos() {
+        const status = document.getElementById('status');
+        const esHospitalizado = document.getElementById('origen').value === 'HOSP';
+
+        if (!isBase64Valid(embeddedTacBase64)) {
+            status.className = "text-center mt-3 text-sm font-bold text-red-600";
+            status.innerText = "⚠️ Falta cargar el PDF Base de la Orden de TAC arriba en el panel de configuración.";
+            document.getElementById('setup-section').classList.remove('hidden');
+            return;
+        }
+
+        if (esHospitalizado && !isBase64Valid(embeddedSicBase64)) {
+            status.className = "text-center mt-3 text-sm font-bold text-red-600";
+            status.innerText = "⚠️ Seleccionaste Paciente Hospitalizado: carga el PDF Base de la Interconsulta (SIC) arriba.";
+            document.getElementById('setup-section').classList.remove('hidden');
+            return;
+        }
+
+        status.className = "text-center mt-3 text-sm font-bold text-blue-700";
+        status.innerText = "Procesando documentos médicos...";
+
+        try {
+            const { pdfDoc: tacDoc, nombreCompletoPaciente, llevaContraste, requiereAnexo3 } = await construirPdfTAC();
+            const slugPaciente = (nombreCompletoPaciente || 'Paciente').replace(/\s+/g, '_');
+
+            if (!esHospitalizado) {
+                const tacBytes = await tacDoc.save();
+                triggerPdfDownload(tacBytes, `Orden_TAC_${slugPaciente}.pdf`);
+                status.className = "text-center mt-3 text-sm font-bold text-emerald-700";
+                status.innerText = llevaContraste
+                    ? (requiereAnexo3 ? "✅ ¡Orden TAC generada! (4 Páginas - Incluye Anexo 3)" : "✅ ¡Orden TAC generada! (3 Páginas - Sin Riesgo Renal)")
+                    : "✅ ¡Orden TAC Simple generada! (1 Página)";
+                return;
+            }
+
+            // Si es Hospitalizado: Generar también la Interconsulta (SIC V6)
+            const sicDoc = await construirPdfSIC();
+            const formatoSalida = document.querySelector('input[name="formato_salida_hosp"]:checked').value;
+
+            if (formatoSalida === 'UNIFICADO') {
+                // Copiar la página de la Interconsulta al final del PDF de la Orden de TAC
+                const [sicPage] = await tacDoc.copyPages(sicDoc, [0]);
+                tacDoc.addPage(sicPage);
+                const mergedBytes = await tacDoc.save();
+                triggerPdfDownload(mergedBytes, `TAC_e_Interconsulta_${slugPaciente}.pdf`);
+                status.className = "text-center mt-3 text-sm font-bold text-emerald-700";
+                status.innerText = "✅ ¡Documento Unificado generado! (Orden de TAC + Interconsulta SIC listas para imprimir).";
+            } else {
+                const tacBytes = await tacDoc.save();
+                const sicBytes = await sicDoc.save();
+                triggerPdfDownload(tacBytes, `Orden_TAC_${slugPaciente}.pdf`);
+                setTimeout(() => {
+                    triggerPdfDownload(sicBytes, `Interconsulta_Imagenologia_${slugPaciente}.pdf`);
+                }, 350);
+                status.className = "text-center mt-3 text-sm font-bold text-emerald-700";
+                status.innerText = "✅ ¡Ambos PDFs generados por separado! (Orden de TAC + Interconsulta SIC).";
+            }
+        } catch (error) {
+            console.error(error);
+            status.className = "text-center mt-3 text-sm font-bold text-red-600";
+            status.innerText = "Error procesando los archivos PDF. Revisa la consola para más detalles.";
+        }
+    }
+</script>
+</body>
+</html>
